@@ -3,7 +3,7 @@
 
 Data: https://www.kaggle.com/c/petfinder-adoption-prediction/data
 
-##### Pet Adoptibility Classification
+#### Pet Adoptibility Classification
 
 This is a multi-level classification problem in which data collected about pets (dogs and cats) listed on the website petfinder.com to predict how quickly a newly listed pet will be adopted based on its features, including, but not limited to, size, age, color, and sex. The classification levels are as follows:
 
@@ -17,7 +17,7 @@ This is a multi-level classification problem in which data collected about pets 
 
 * 4 - No adoption after 100 days of being listed. (There are no pets in this dataset that waited between 90 and 100 days). 
 
-##### CNN for Multilevel Classification
+#### CNN for Multilevel Classification
 
 We propose using a CNN for this classification prediction but will additionally explore other types of NNs.
 
