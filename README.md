@@ -5,7 +5,7 @@ Data: https://www.kaggle.com/c/petfinder-adoption-prediction/data
 
 #### Pet Adoptibility Classification
 
-This is a multi-level classification problem in which data collected about pets (dogs and cats) listed on the website petfinder.com to predict how quickly a newly listed pet will be adopted based on its features, including, but not limited to, size, age, color, and sex. The classification levels are as follows:
+This is a multi-level classification problem in which data collected about pets (dogs and cats) listed on the website petfinder.com will be used to predict how quickly a newly listed pet will be adopted based on its features, including, but not limited to, size, age, color, and sex. The classification levels are as follows:
 
 * 0 - Pet was adopted on the same day as it was listed.
 
