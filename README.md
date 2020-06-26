@@ -1,4 +1,4 @@
-# bios691
+## BIOS691 Final Project Proposal
 ### Laura Williams and Shannon Moldowan
 
 Data: https://www.kaggle.com/c/petfinder-adoption-prediction/data
