@@ -2,22 +2,22 @@ source('data_prep.R')
 library(Metrics)
 
 model <- keras_model_sequential() %>% 
-  layer_dense(units = 512, activation = "selu",input_shape = c(ncol(train_df))) %>%
+  layer_dense(units = 128, activation = "relu",input_shape = c(ncol(train_df))) %>%
   layer_dropout(rate=.5) %>%
-  # layer_dense(units = 256, activation = "relu") %>%
-  # layer_dropout(rate=.5) %>%
+  layer_dense(units = 128, activation = "relu") %>%
+  layer_dropout(rate=.5) %>%
+  layer_dense(units = 128, activation = "relu") %>%
+  layer_dropout(rate=.5) %>%
   # layer_dense(units = 128, activation = "relu") %>%
-  # layer_dropout(rate=.5) %>%
-  # layer_dense(units = 64, activation = "relu") %>%
-  # layer_dropout(rate=.3) %>%
-  layer_dense(units = 32, activation = "relu") %>%
-  layer_dropout(rate=.1) %>%
+  # layer_dropout(rate=.4) %>%
+  # layer_dense(units = 32, activation = "relu") %>%
+  # layer_dropout(rate=.1) %>%
   layer_dense(units = 5, activation = "softmax")
 
-summary(model)
+# summary(model)
 
 model %>% compile(
-  optimizer = 'adam',
+  optimizer = 'sgd',
   loss = "categorical_crossentropy",
   metrics = c("accuracy")
 )
@@ -26,7 +26,7 @@ history <- model %>% fit(
   (train_df),
   (train_labels),
   epochs = 100,
-  batch_size=256,
+  batch_size=128,
   validation_split=.2
 )
 
@@ -59,6 +59,9 @@ pred=factor(pred,levels = c('1','2','3','4','5'))
 # levels(pred)=c('1','2','3','4','5')
 true=factor(true)
 
-conf_table = table(true,pred)
+# conf_table = table(true,pred)
 
 ScoreQuadraticWeightedKappa(true,pred,1,5)
+
+
+

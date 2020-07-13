@@ -1,0 +1,447 @@
+---
+title: "Predicting Adoption Speed"
+author: "Laura Williams and Shannon Moldowan"
+date: "7/12/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(keras)
+library(tensorflow)
+library(dplyr)
+library(corrplot)
+library(RColorBrewer)
+set.seed(8675309)
+
+train=read.csv('train.csv')
+
+```
+
+### Introduction
+
+The website PetFinder.my, founded in 2008, is Malaysia's leading animal welfare platform. The data posted on Kaggle for the Adoption Prediction Competition contains 24 variables, images, and sentiment data.
+
+### Data Preparation
+
+For this problem, we decided to attempt to predict adoption speed with only the data provided. The data and data fields included may be viewed at https://www.kaggle.com/c/petfinder-adoption-prediction/data. Below are the first 5 observations of the training data provided.
+
+```{r,echo=FALSE}
+
+head(train,n=5)
+
+```
+
+#### Initial Variable Selection
+
+We first removed the identifier fields RescuerID and PetID. After manually searching through the Descriptions, we decided that attemting NLP on the text was out of our scope, and decided to remove it (also due to the uncertainty of unseen input). We drew the same conclusion after considering the Name variable. For example, many of the pets had no name listed. However, the format in which this was indicated ranged widely, making classifying pets as having names or not difficult. Listed below were the variables remaining.
+
+```{r,echo=FALSE}
+
+train = train %>%
+  select(-Name,-RescuerID,-Description,-PetID,-State)
+
+train$Type=train$Type-1
+train$Gender=train$Gender-1
+train$Vaccinated=train$Vaccinated-1
+train$Dewormed=train$Dewormed-1
+train$Sterilized=train$Sterilized-1
+
+full_train_cor = train
+names(train)
+
+
+```
+
+Next, we examined the remaining variables.
+
+We first looked at the Age variable, which was recorded in months. Since the majority of the ages for the pets listed were about 2 years and younger, we decided to split the age variable into 6 months old or younger (as many people desire young animals), indicating puppies and kittens, and all other ages. Below is the frequency of the younger and older pets.
+
+```{r,echo=FALSE}
+
+
+Age_Binary = ifelse(train$Age<=6,'Young','Old')
+table(factor(Age_Binary))
+
+hist(train$Age, xlab = 'Age in Months',main='Original Age Variable',col = 'cadetblue2')
+
+train$Age = ifelse(train$Age<=6,0,1)
+
+
+```
+
+
+Next, we examined the Breed variables (1 and 2). Due to the number of different breeds, and the majority of pets listed without a second breed, we created a new variable indicating whether a pet was a mixed breed (2 breeds) or not. Below is the frequency of mixed/non mixed breeds.
+
+```{r,echo=FALSE}
+
+
+train$mixed_breed=ifelse(train$Breed2==0,0,1)
+
+Mixed_Breed = ifelse(train$Breed2==0,'No','Yes')
+
+table(factor(Mixed_Breed))
+
+
+hist(train$Breed1, xlab = 'Breed1',main='First Breed',col='cadetblue2')
+hist(train$Breed2, xlab = 'Breed2',main='Second Breed',col='cadetblue3')
+train=train %>% select(-Breed1,-Breed2)
+
+```
+
+
+Since three color variables were included, we decided that we would similarly create a new variable indicating how many colors a pet had.
+
+```{r,echo=FALSE}
+
+train$color = ifelse(train$Color3==0 & train$Color2 == 0,0,
+                     ifelse(train$Color1!=0 & train$Color2!=0 &train$Color3==0,1,2))
+
+
+new_color =ifelse(train$Color3==0 & train$Color2 == 0,'1 Color',
+                     ifelse(train$Color1!=0 & train$Color2!=0 &train$Color3==0,'2 Colors','3 Colors'))
+table(factor(new_color))
+
+hist(train$Color1, xlab = 'Color1',main='First Color',col='cadetblue2')
+hist(train$Color2, xlab = 'Color2',main='Second Color',col='cadetblue3')
+hist(train$Color3, xlab = 'Color3',main='Third Color',col='cadetblue4')
+
+train = train %>% select(-Color1,-Color2,-Color3)
+```
+
+
+Next, we looked at the Fee variable. Due to the majority of pets having no fee listed and the wide range of fees that were listed, we created a new variable to indicate if there was a fee or not.
+
+```{r,echo=FALSE}
+
+new_fee = ifelse(train$Fee==0,'No fee','Fee')
+
+table(factor(new_fee))
+
+hist(train$Fee,xlab = 'Pet Fee',main='Original Fee Variable',col='cadetblue2')
+
+train$Fee = ifelse(train$Fee==0,0,1)
+
+
+```
+
+Next, we examined the photo and video amount variables. Since the majority of the number of photos falls between 1 and 5, we created a variable that included listings with no photos, 1 to 5 photos, and all other amounts.
+
+The first table shows the original variable frequencies, and the second shows the new variable frequencies.
+
+```{r,echo=FALSE}
+
+# Original Variable
+table(train$PhotoAmt)
+
+train$PhotoAmt=ifelse(train$PhotoAmt==0,0,ifelse(train$PhotoAmt>0 & train$PhotoAmt<=5,1,2))
+
+#New Variable
+table(train$PhotoAmt)
+
+
+```
+
+Since the majority of listings had no videos, we created a new variable indicating whether videos were listed or not.
+
+```{r,echo=FALSE}
+
+VideoAmt=ifelse(train$VideoAmt==0,'No video','Video(s)')
+table(factor(VideoAmt))
+
+hist(train$VideoAmt,xlab='Number of videos listed',main='Original Video Amounts',col='cadetblue2')
+
+train$VideoAmt=ifelse(train$VideoAmt==0,0,1)
+
+
+```
+
+
+Lastly, we examined Quantity. Since the majority of listings listed only 1 pet, we created a new variable indicating whether 1 or multiple pets were listed.
+
+```{r,echo=FALSE}
+
+hist(train$Quantity,xlab='Number of Pets Listed',main='Original Quantity Variable',col='cadetblue2')
+
+quantity = ifelse(train$Quantity<=1,'1','More than 1')
+table(factor(quantity))
+
+train$Quantity = ifelse(train$Quantity<=1,0,1)
+
+```
+
+
+#### Check for correlated variables
+
+After transforming/creating new variables, we checked for any correlations between variables. As seen in the plot below, the variables Dewormed and Vaccinated are highly correlated, so we chose to drop the Dewormed variable.
+
+We also noticed that none of the variables were correlated with Adoption Speed. The second plot below shows the correlation matrix of the included variables before we created new ones.
+
+```{r,echo=FALSE}
+
+corrplot(cor(train),method='number',type='upper',number.cex=.7)
+
+corrplot(cor(full_train_cor),method='number',type='upper',number.cex=.6)
+
+
+train = train %>% select(-Dewormed)
+train1=train
+
+```
+
+
+### Model Preparation
+
+Prior to model building, we first split our data 80\%/20\% for the training and testing sets. We used seed 8675309 to sample rows, and normalized all variables that were not binary. Below shows the first 5 observations of the training set.
+
+```{r,echo=FALSE}
+
+head(train1,num=5)
+
+train1=as.matrix(train1)
+dimnames(train1)=NULL
+
+train1[,c(3:8,12,15)]=keras::normalize(train1[,c(3:8,12,15)])
+
+sample_rows =sample(2,nrow(train1),replace=TRUE,prob=c(.8,.2))
+
+train_df = train1[sample_rows==1,]
+train_df_copy=train_df
+test_df = train1[sample_rows==2,]
+
+train_labels = train_df[,13]
+test_labels = test_df[,13]
+# test_labels_copy=test_labels
+
+train_df =train_df[,-13]
+test_df = test_df[,-13]
+
+train_labels = keras::to_categorical(train_labels)
+test_labels = keras::to_categorical(test_labels)
+
+```
+
+
+### Model Preparation
+
+With the absence of any high or relatively high correlations between the features and Adoption Speed, we were not optimistic about producing a working model.
+
+We first tried to fit a simple MLP model. Our initial model fit parameters were:
+
+* Epochs = 100
+* Batch size = 32
+* Validation split = 20\%
+* Optimizer = adam
+
+In our first model, we used one layer with 64 units. This model was only able to do slightly better than randomly guessing the adoption speed.
+
+```{r}
+
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 16, activation = "relu",input_shape = c(ncol(train_df))) %>%
+  layer_dense(units = 5, activation = "softmax")
+
+model %>% compile(
+  optimizer = optimizer_adam(),
+  loss = "categorical_crossentropy",
+  metrics = c("accuracy")
+)
+
+history <- model %>% fit(
+  (train_df),
+  (train_labels),
+  epochs = 100,
+  batch_size=32,
+  validation_split=.2
+)
+
+model %>%  evaluate(test_df,test_labels)
+
+```
+
+
+Increasing the number of units in the first layer and adding dropout produced similar results. Adding additional layers also showed no real change in accuracy or loss.
+
+```{r}
+
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 128, activation = "relu",input_shape = c(ncol(train_df))) %>%
+  layer_dropout(rate=.5) %>%
+  layer_dense(units = 5, activation = "softmax")
+
+model %>% compile(
+  optimizer = optimizer_adam(),
+  loss = "categorical_crossentropy",
+  metrics = c("accuracy")
+)
+
+history <- model %>% fit(
+  (train_df),
+  (train_labels),
+  epochs = 100,
+  batch_size=32,
+  validation_split=.2
+)
+
+model %>%  evaluate(test_df,test_labels)
+
+```
+
+
+```{r}
+
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 128, activation = "relu",input_shape = c(ncol(train_df))) %>%
+  layer_dropout(rate=.5) %>%
+  layer_dense(units = 64,activation = "relu") %>%
+  layer_dropout(rate=.5) %>%
+  layer_dense(units = 5, activation = "softmax")
+
+model %>% compile(
+  optimizer = optimizer_adam(),
+  loss = "categorical_crossentropy",
+  metrics = c("accuracy")
+)
+
+history <- model %>% fit(
+  (train_df),
+  (train_labels),
+  epochs = 100,
+  batch_size=128,
+  validation_split=.2
+)
+
+model %>%  evaluate(test_df,test_labels)
+
+```
+
+We tried many combinations of unit size, number of layers, batch sizes, amount of dropout, weight regularization, learning rates, class weights, and kernel initialization, and were unable to achieve accuracy much better than the network randomly guessing or a loss close to or below 1. Below are a few examples we attempted to fit.
+
+```{r}
+
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 256, activation = "relu",input_shape = c(ncol(train_df))) %>%
+  layer_dropout(rate=.5) %>%
+  layer_dense(units = 128,activation = "relu") %>%
+  layer_dropout(rate=.5) %>%
+  layer_dense(units = 128,activation = "relu") %>%
+  layer_dropout(rate=.5) %>%
+  layer_dense(units = 5, activation = "softmax")
+
+model %>% compile(
+  optimizer = optimizer_adam(),
+  loss = "categorical_crossentropy",
+  metrics = c("accuracy")
+)
+
+history <- model %>% fit(
+  (train_df),
+  (train_labels),
+  epochs = 100,
+  batch_size=128,
+  validation_split=.2
+)
+
+model %>%  evaluate(test_df,test_labels)
+
+
+```
+
+```{r}
+
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 128, activation = "relu",input_shape = c(ncol(train_df))) %>%
+  layer_dropout(rate=.5) %>%
+  layer_dense(units = 64,activation = "relu") %>%
+  layer_dropout(rate=.5) %>%
+  layer_dense(units = 32,activation = "relu") %>%
+  layer_dropout(rate=.5) %>%
+  layer_dense(units = 16,activation = "relu") %>%
+  layer_dense(units = 5, activation = "softmax")
+
+model %>% compile(
+  optimizer = optimizer_adam(),
+  loss = "categorical_crossentropy",
+  metrics = c("accuracy")
+)
+
+history <- model %>% fit(
+  (train_df),
+  (train_labels),
+  epochs = 100,
+  batch_size=256,
+  validation_split=.2
+)
+
+model %>%  evaluate(test_df,test_labels)
+
+```
+
+```{r}
+
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 128, activation = "relu",kernel_regularizer = regularizer_l1(.0001),
+              input_shape = c(ncol(train_df))) %>%
+  layer_dropout(rate=.5) %>%
+  layer_dense(units = 64,activation = "relu",kernel_regularizer = regularizer_l1(.0001)) %>%
+  layer_dense(units = 5, activation = "softmax")
+
+model %>% compile(
+  optimizer = optimizer_adam(),
+  loss = "categorical_crossentropy",
+  metrics = c("accuracy")
+)
+
+history <- model %>% fit(
+  (train_df),
+  (train_labels),
+  epochs = 100,
+  batch_size=256,
+  validation_split=.2
+)
+
+model %>%  evaluate(test_df,test_labels)
+
+```
+
+
+```{r}
+
+as.numeric(table(train_df_copy[,13])[1])/table(train_df_copy[,13])
+
+
+model <- keras_model_sequential() %>% 
+  layer_dense(units = 128, activation = "relu",input_shape = c(ncol(train_df))) %>%
+  layer_dropout(rate=.5) %>%
+  layer_dense(units = 64,activation = "relu") %>%
+  layer_dropout(rate=.5) %>%
+  layer_dense(units = 5, activation = "softmax")
+
+model %>% compile(
+  optimizer = optimizer_adam(),
+  loss = "categorical_crossentropy",
+  metrics = c("accuracy")
+)
+
+history <- model %>% fit(
+  (train_df),
+  (train_labels),
+  epochs = 100,
+  batch_size=64,
+  validation_split=.2,
+  class_weight = list("0" = 1, "1" = 0.136, "2" = 0.104, "3" = 0.128, "4" = 0.10)
+)
+
+model %>%  evaluate(test_df,test_labels)
+
+```
+
+
+### Discussion
+
+After many attempts to increase the prediction accuracy, it became clear that we were unable to fit the data adequately. Above are a handful of the many models we built in attempts to create a working model.
+
+Another ML model may be more appropriate to fit the data. Using the image and/or sentiment data may have improved the training of the model. However, based on our proposal to use only the listing data, this was our best attempt to build a working model.
+
+
+
